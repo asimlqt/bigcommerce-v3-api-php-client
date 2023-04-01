@@ -3,6 +3,7 @@
 namespace BigCommerce\ApiV3\Api\Generic;
 
 use BigCommerce\ApiV3\Client;
+use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\RequestOptions;
 use Psr\Http\Message\ResponseInterface;
 
@@ -13,11 +14,10 @@ trait UpdateResource
 
     protected function updateResource(object $resource): ResponseInterface
     {
-        return $this->getClient()->getRestClient()->put(
-            $this->singleResourceUrl(),
-            [
-                RequestOptions::JSON => $resource,
-            ]
-        );
+        $request = $this->getClient()
+            ->createRequest('PUT', new Uri($this->getClient()->getBaseUri() . $this->singleResourceUrl()))
+            ->withBody($this->getClient()->getStreamFactory()->createStream(json_encode($resource)));
+
+        return $this->getClient()->getRestClient()->sendRequest($request);
     }
 }

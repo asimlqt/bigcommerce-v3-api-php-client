@@ -3,7 +3,9 @@
 namespace BigCommerce\ApiV3\Api\Generic;
 
 use BigCommerce\ApiV3\Client;
-use GuzzleHttp\RequestOptions;
+use GuzzleHttp\Psr7\Uri;
+use Http\Message\MultipartStream\MultipartStreamBuilder;
+use Psr\Http\Message\ResponseInterface;
 
 trait CreateImage
 {
@@ -14,20 +16,19 @@ trait CreateImage
      * Add an image to a resource
      *
      * @param string $filename Any path that can be opened using fopen
-     * @return string The url to the stored image
+     * @return ResponseInterface
      * @throws \Psr\Http\Client\ClientExceptionInterface
      */
-    public function create(string $filename): string
+    public function createImage(string $filename): ResponseInterface
     {
-        $response = $this->getClient()->getRestClient()->post(
-            $this->multipleResourceUrl(),
-            [
-                RequestOptions::MULTIPART => [
-                    ['name' => 'image_file', 'contents'  => fopen($filename, 'r')]
-                ]
-            ]
-        );
+        $builder = new MultipartStreamBuilder();
+        $builder->addResource('image_file', fopen($filename, 'r'));
 
-        return json_decode($response->getBody())->data->image_url;
+        $request = $this->getClient()
+            ->createRequest('POST', new Uri($this->getClient()->getBaseUri() . $this->multipleResourceUrl()))
+            ->withHeader('Content-Type', sprintf('multipart/form-data; boundary="%s"', $builder->getBoundary()))
+            ->withBody($builder->build());
+
+        return $this->getClient()->getRestClient()->sendRequest($request);
     }
 }

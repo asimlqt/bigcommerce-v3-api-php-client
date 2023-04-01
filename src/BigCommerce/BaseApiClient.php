@@ -4,6 +4,12 @@ namespace BigCommerce\ApiV3;
 
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
+use Http\Discovery\Psr17FactoryDiscovery;
+use Http\Discovery\Psr18ClientDiscovery;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\StreamFactoryInterface;
 
 abstract class BaseApiClient
 {
@@ -26,7 +32,12 @@ abstract class BaseApiClient
 
     private string $baseUri;
 
-    private \GuzzleHttp\Client $client;
+    private ?ClientInterface $client;
+
+    private ?RequestFactoryInterface $requestFactory;
+
+    private ?StreamFactoryInterface $streamFactory;
+
 
     private array $debugContainer = [];
 
@@ -41,33 +52,16 @@ abstract class BaseApiClient
     public function __construct(
         string $storeHash,
         string $clientId,
-        string $accessToken,
-        ?\GuzzleHttp\Client $client = null,
-        ?array $clientOptions = []
+        string $accessToken
     ) {
         $this->storeHash    = $storeHash;
         $this->clientId     = $clientId;
         $this->accessToken  = $accessToken;
         $this->setBaseUri(sprintf($this->defaultBaseUrl(), $this->storeHash));
 
-        $this->client = $client ?? $this->buildDefaultHttpClient($clientOptions);
-    }
-
-    private function buildDefaultHttpClient(array $clientOptions): \GuzzleHttp\Client
-    {
-        $history = Middleware::history($this->debugContainer);
-        $stack   = HandlerStack::create();
-        $stack->push($history);
-
-        $options = array_merge($this->defaultClientOptions, $clientOptions);
-        $options[self::DEFAULT_HANDLER] = $stack;
-        $options[self::DEFAULT_BASE_URI] = $this->getBaseUri();
-        $options[self::DEFAULT_HEADERS] = array_merge([
-            self::HEADERS__AUTH_CLIENT  => $this->clientId,
-            self::HEADERS__AUTH_TOKEN   => $this->accessToken,
-        ], $options[self::DEFAULT_HEADERS]);
-
-        return new \GuzzleHttp\Client($options);
+        $this->requestFactory = null;
+        $this->streamFactory = null;
+        $this->client = null;
     }
 
     public function getBaseUri(): string
@@ -80,14 +74,57 @@ abstract class BaseApiClient
         $this->baseUri = $baseUri;
     }
 
-    public function getRestClient(): \GuzzleHttp\Client
+    public function getDefaultHeaders(): array
     {
+        return [
+            self::HEADERS__AUTH_CLIENT  => $this->clientId,
+            self::HEADERS__AUTH_TOKEN   => $this->accessToken,
+            self::HEADERS__CONTENT_TYPE => self::APPLICATION_JSON,
+            self::HEADERS__ACCEPT       => self::APPLICATION_JSON,
+        ];
+    }
+
+    public function getRestClient(): ClientInterface
+    {
+        if (null === $this->client) {
+            $this->client = Psr18ClientDiscovery::find();
+        }
+
         return $this->client;
     }
 
-    public function setRestClient(\GuzzleHttp\Client $client): void
+    public function setRestClient(ClientInterface $client): void
     {
         $this->client = $client;
+    }
+
+    public function createRequest(string $method, string $uri): RequestInterface
+    {
+        $request = $this->getRequestFactory()->createRequest($method, $uri);
+
+        foreach ($this->getDefaultHeaders() as $header => $content) {
+            $request = $request->withHeader($header, $content);
+        }
+
+        return $request;
+    }
+
+    public function getRequestFactory(): RequestFactoryInterface
+    {
+        if (null === $this->requestFactory) {
+            $this->requestFactory = Psr17FactoryDiscovery::findRequestFactory();
+        }
+
+        return $this->requestFactory;
+    }
+
+    public function getStreamFactory(): StreamFactoryInterface
+    {
+        if (null === $this->streamFactory) {
+            $this->streamFactory = Psr17FactoryDiscovery::findStreamFactory();
+        }
+
+        return $this->streamFactory;
     }
 
     public function printDebug()

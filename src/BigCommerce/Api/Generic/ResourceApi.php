@@ -17,6 +17,7 @@ abstract class ResourceApi extends V3ApiBase
     use UpdateResource;
     use DeleteResource;
     use CreateResource;
+    use CreateImage;
 
     abstract protected function singleResourceEndpoint(): string;
     abstract protected function multipleResourcesEndpoint(): string;
